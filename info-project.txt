@@ -1,0 +1,273 @@
+We’ll do this end-to-end from absolute scratch, exactly like a real production lab.
+
+You will end with:
+
+- A new GitHub repo
+- Java app v1 & v2
+- Docker images built & pushed
+- Argo CD + Argo Rollouts installed
+- Blue-Green deployment using Istio VirtualService
+- Manual promotion using kubectl argo rollouts promote
+
+🧪 FULL LAB: Blue-Green Deployment with Argo CD + Argo Rollouts + Istio
+
+🧠 Architecture (What You Are Building)
+
+GitHub Repo
+   ↓
+Argo CD (GitOps Sync)
+   ↓
+Argo Rollouts (Blue-Green Logic)
+   ↓
+Kubernetes Services (Active / Preview)
+   ↓
+Istio VirtualService
+   ↓
+Users
+
+0️⃣ Prerequisites (Local Machine)
+kubectl version
+docker version
+git --version
+Cluster must already have Istio installed (you already have this).
+
+1️⃣ Create New GitHub Repository
+student-management-rollouts
+
+git clone https://github.com/vivekbagde1203/student-management-rollouts.git
+cd student-management-rollouts
+
+2️⃣ Java App Source Code (v1 & v2)
+📁 Folder Structure
+
+app/
+├── Dockerfile
+├── pom.xml
+└── src/main/java/com/example/App.java
+
+🔹 Java Source Code (v1)
+package com.example;
+
+import static spark.Spark.*;
+
+public class App {
+    public static void main(String[] args) {
+        port(8080);
+
+        get("/", (req, res) -> "Student Management App - VERSION v1 (BLUE)");
+    }
+}
+
+🔹 Java Source Code (v2 – change only text)
+
+get("/", (req, res) -> "Student Management App - VERSION v2 (GREEN)");
+
+🔹 pom.xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.example</groupId>
+  <artifactId>student-management</artifactId>
+  <version>1.0</version>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.sparkjava</groupId>
+      <artifactId>spark-core</artifactId>
+      <version>2.9.4</version>
+    </dependency>
+  </dependencies>
+</project>
+
+3️⃣ Dockerfile (Same for v1 & v2)
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY target/student-management-1.0.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","app.jar"]
+
+
+4️⃣ Build JAR & Docker Images
+mvn clean package
+
+Build & Push v1 Image
+docker build -t projectdocker1203/student-management:v1 .
+docker push projectdocker1203/student-management:v1
+
+Change Code → v2 → Build & Push
+docker build -t projectdocker1203/student-management:v2 .
+docker push projectdocker1203/student-management:v2
+
+5️⃣ Install Argo CD (Cluster)
+kubectl create namespace argocd
+
+kubectl apply -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+kubectl get secret argocd-initial-admin-secret \
+  -n argocd -o jsonpath="{.data.password}" | base64 -d
+
+6️⃣ Install Argo Rollouts (Cluster)
+kubectl create namespace argo-rollouts
+
+kubectl apply -n argo-rollouts \
+  -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+
+kubectl get pods -n argo-rollouts
+
+7️⃣ Install CLI Tools (Local)
+Argo CD CLI
+brew install argocd
+
+Argo Rollouts CLI
+brew install kubectl-argo-rollouts
+
+argocd version
+kubectl argo rollouts version
+
+8️⃣ Kubernetes Manifests (GitOps)
+student-management/
+├── rollout.yaml
+├── service-active.yaml
+├── service-preview.yaml
+├── gateway.yaml
+├── virtualservice.yaml
+└── argocd-app.yaml
+
+🔹 rollout.yaml (Blue-Green)
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: student-management
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: student-management
+  template:
+    metadata:
+      labels:
+        app: student-management
+    spec:
+      containers:
+      - name: app
+        image: projectdocker1203/student-management:v1
+        ports:
+        - containerPort: 8080
+
+  strategy:
+    blueGreen:
+      activeService: student-active
+      previewService: student-preview
+      autoPromotionEnabled: false
+
+🔹 service-active.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-active
+spec:
+  selector:
+    app: student-management
+  ports:
+  - port: 80
+    targetPort: 8080
+
+🔹 service-preview.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-preview
+spec:
+  selector:
+    app: student-management
+  ports:
+  - port: 80
+    targetPort: 8080
+
+🔹 gateway.yaml (Istio)
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: student-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+
+🔹 virtualservice.yaml (STATIC)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: student-vs
+spec:
+  gateways:
+  - istio-system/student-gateway
+  hosts:
+  - "*"
+  http:
+  - route:
+    - destination:
+        host: student-active
+        port:
+          number: 80
+
+
+🔹 argocd-app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: student-management
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vivekbagde1203/student-management-rollouts.git
+    targetRevision: main
+    path: student-management
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+9️⃣ Git Push & Sync
+git add .
+git commit -m "Initial blue-green setup v1"
+git push origin main
+
+
+argocd app sync student-management
+
+🔟 Deploy v2 (GREEN)
+Edit rollout.yaml:
+image: projectdocker1203/student-management:v2
+
+git commit -am "Deploy v2"
+git push
+
+1️⃣1️⃣ Promote (THIS IS THE TEST)
+kubectl argo rollouts promote student-management
+
+✔ VirtualService unchanged
+✔ Service selectors switch
+✔ Traffic moves instantly
+
+🔍 Observe Like a Pro
+kubectl argo rollouts get rollout student-management
+kubectl describe svc student-active
+
+
+
+
+
