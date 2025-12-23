@@ -93,10 +93,12 @@ mvn clean package
 Build & Push v1 Image
 docker build -t projectdocker1203/student-management:v1 .
 docker push projectdocker1203/student-management:v1
+docker buildx build --platform linux/amd64 -t projectdocker1203/student-management-argo:v1 --push .
 
 Change Code → v2 → Build & Push
 docker build -t projectdocker1203/student-management:v2 .
 docker push projectdocker1203/student-management:v2
+docker buildx build --platform linux/amd64 -t projectdocker1203/student-management-argo:v2 --push .
 
 5️⃣ Install Argo CD (Cluster)
 kubectl create namespace argocd
@@ -108,6 +110,13 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 kubectl get secret argocd-initial-admin-secret \
   -n argocd -o jsonpath="{.data.password}" | base64 -d
+
+edit argocd-server deployment and add argument:
+- args: 
+- /usr/local/bin/argocd-server 
+- --port=8080 
+- --metrics-port=8083 
+- --insecure #this need to add
 
 6️⃣ Install Argo Rollouts (Cluster)
 kubectl create namespace argo-rollouts
