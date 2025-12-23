@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: student-management
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: student-management
+  template:
+    metadata:
+      labels:
+        app: student-management
+    spec:
+      containers:
+      - name: app
+        image: projectdocker1203/student-management:v1
+        ports:
+        - containerPort: 8080
+
+  strategy:
+    blueGreen:
+      activeService: student-active
+      previewService: student-preview
+      autoPromotionEnabled: false
+

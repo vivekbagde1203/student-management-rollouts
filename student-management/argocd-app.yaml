@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: student-management
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vivekbagde1203/student-management-rollouts.git
+    targetRevision: master
+    path: student-management
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
