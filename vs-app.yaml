@@ -1,7 +1,7 @@
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: argocd-virtualservice
+  name: app-virtualservice
 spec:
   gateways:
   - istio-system/monitoring-gateway
@@ -10,9 +10,9 @@ spec:
   http:
   - match:
     - uri:
-        prefix: /argocd
+        prefix: /
     route:
     - destination:
-        host: argocd-server.argocd.svc.cluster.local
+        host: student-active.dev.svc.cluster.local
         port:
           number: 80
