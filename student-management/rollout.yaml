@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: projectdocker1203/student-management-argo:v2
+        image: projectdocker1203/student-management-argo:v1
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
