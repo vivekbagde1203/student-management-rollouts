@@ -3,8 +3,6 @@ kind: Service
 metadata:
   name: student-active
 spec:
-  selector:
-    app: student-management
   ports:
   - port: 80
     targetPort: 8080
